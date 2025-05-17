@@ -814,7 +814,7 @@ if (fileId) {
 
         function fetchSheetData(sheetId) {
     const base = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?`;
-    const query = encodeURIComponent('Select B, C'); // 明確只選 B 和 C 欄
+    const query = encodeURIComponent('Select B, C where B is not null offset 1');
     const url = `${base}&tq=${query}`;
 
     return fetch(url)
@@ -822,24 +822,55 @@ if (fileId) {
         .then(rep => {
             const jsonStr = rep.match(/google\.visualization\.Query\.setResponse\(([\s\S]+)\);/)[1];
             const data = JSON.parse(jsonStr);
-            console.log("確認欄位對應:", data.table.rows[0].c); // 應為 [B欄, C欄]
+            
+            console.log("Google Sheet 總行數:", data.table.rows.length);
+            data.table.rows.forEach((row, index) => {
+                console.log(`第 ${index + 1} 行:`, {
+                    原文: row.c[0]?.v,
+                    替換為: row.c[1]?.v
+                });
+            });
+            
             return data;
         })
         .catch(err => {
-            console.error('載入失敗:', err);
+            console.error('載入 Google Sheet 失敗:', err);
             return null;
         });
 }
 
 function replaceTextWithSheetData(text, data) {
-    if (!data) return text;
-    data.table.rows.forEach(row => {
-        const original = row.c[0]?.v; // B欄 (因為只選了 B 和 C)
-        const replacement = row.c[1]?.v; // C欄
+    if (!data || !data.table || !data.table.rows) {
+        console.log("無效的 Google Sheet 數據");
+        return text;
+    }
+    
+    console.log("開始替換文字，總行數:", data.table.rows.length);
+    let replacedCount = 0;
+    
+    data.table.rows.forEach((row, index) => {
+        const original = row.c[0]?.v;
+        const replacement = row.c[1]?.v;
+        
         if (original && replacement) {
-            text = text.replace(new RegExp(original, "g"), replacement);
+            console.log(`處理第 ${index + 1} 行:`, {
+                原文: original,
+                替換為: replacement
+            });
+            
+            const regex = new RegExp(original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+            const newText = text.replace(regex, replacement);
+            
+            if (newText !== text) {
+                replacedCount++;
+                console.log(`成功替換 "${original}" 為 "${replacement}"`);
+            }
+            
+            text = newText;
         }
     });
+    
+    console.log(`完成替換，共處理 ${replacedCount} 個替換項目`);
     return text;
 }
  async function sendTextToTTS(selectedText, callback) {
@@ -848,11 +879,17 @@ function replaceTextWithSheetData(text, data) {
     
     const sheetId = getSheetIdFromUrl();
     if (sheetId) {
+        console.log("檢測到 Google Sheet ID:", sheetId);
         const data = await fetchSheetData(sheetId);
-        filteredText = replaceTextWithSheetData(cleanedText, data);
+        if (data) {
+            console.log("成功獲取 Google Sheet 數據");
+            filteredText = replaceTextWithSheetData(cleanedText, data);
+        } else {
+            console.log("無法獲取 Google Sheet 數據，使用原始文本");
+        }
     }
     
-    console.log("送出給 TTS 的文本:", filteredText);
+    console.log("最終送出給 TTS 的文本:", filteredText);
     // 獲取選擇的聲音和語速
     const voiceName = document.getElementById("voiceSelect").value;
     const ratePercent = parseFloat(document.getElementById('speakSpeed').value); // 使用百分比
