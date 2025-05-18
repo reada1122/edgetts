@@ -814,8 +814,8 @@ if (fileId) {
 
         function fetchSheetData(sheetId) {
     const base = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?`;
-    // 修改查詢以獲取第2欄和第3欄
-    const query = encodeURIComponent('SELECT Col1, Col2');
+    // 不指定具體欄位，獲取所有數據
+    const query = encodeURIComponent('SELECT *');
     const url = `${base}&tq=${query}&headers=1`;
 
     console.log('正在請求 Google Sheet URL:', url);
@@ -829,49 +829,70 @@ if (fileId) {
             try {
                 console.log('原始回應文本:', rep);
                 
-                // 使用更寬鬆的正則表達式來匹配 JSON 數據
-                const jsonStart = rep.indexOf('{');
-                const jsonEnd = rep.lastIndexOf('}') + 1;
-                const jsonStr = rep.slice(jsonStart, jsonEnd);
-                
-                console.log('提取的 JSON 字符串:', jsonStr);
+                // 提取 JSON 數據
+                const jsonData = rep.match(/google\.visualization\.Query\.setResponse\(([\s\S\n]*?)\);/);
+                if (!jsonData || !jsonData[1]) {
+                    console.error('無法從回應中提取 JSON 數據');
+                    return null;
+                }
 
-                const data = JSON.parse(jsonStr);
-                console.log('完整解析後的數據:', data);
+                const data = JSON.parse(jsonData[1]);
+                console.log('解析後的完整數據:', data);
 
-                if (!data.table || !data.table.rows) {
-                    console.error('數據結構不完整');
+                // 檢查數據結構
+                if (!data || !data.table || !data.table.rows || !Array.isArray(data.table.rows)) {
+                    console.error('數據結構不符合預期格式');
                     return null;
                 }
 
                 // 移除標題行並過濾有效數據
                 const rows = data.table.rows.slice(1).filter(row => {
-                    return row && row.c && 
-                           Array.isArray(row.c) && 
-                           row.c.length >= 2 && 
-                           row.c[1] && row.c[2]; // 檢查第2欄和第3欄
+                    const isValid = row && 
+                                  row.c && 
+                                  Array.isArray(row.c) && 
+                                  row.c.length >= 3 && // 確保至少有3列
+                                  row.c[1] && row.c[2]; // 檢查第2列和第3列是否存在
+                    
+                    if (!isValid) {
+                        console.log('發現無效行:', row);
+                    }
+                    return isValid;
                 });
 
-                console.log('總行數（包含標題）:', data.table.rows.length);
-                console.log('處理後的有效行數:', rows.length);
+                console.log('原始總行數:', data.table.rows.length);
+                console.log('有效數據行數:', rows.length);
 
-                // 檢查每一行的數據
+                // 檢查並記錄每行的內容
                 rows.forEach((row, index) => {
-                    console.log(`第 ${index + 1} 行數據:`, {
-                        原語詞: row.c[1]?.v, // 第2欄
-                        替換語詞: row.c[2]?.v, // 第3欄
-                        原語詞類型: typeof row.c[1]?.v,
-                        替換語詞類型: typeof row.c[2]?.v
+                    const originalText = row.c[1]?.v;
+                    const replacementText = row.c[2]?.v;
+                    console.log(`第 ${index + 1} 行有效數據:`, {
+                        原文: originalText,
+                        替換: replacementText,
+                        原文類型: typeof originalText,
+                        替換類型: typeof replacementText
                     });
                 });
 
+                // 如果沒有有效數據，返回 null
+                if (rows.length === 0) {
+                    console.log('沒有找到有效的替換規則數據');
+                    return null;
+                }
+
                 return {
                     table: {
-                        rows: rows
+                        rows: rows.map(row => ({
+                            c: [
+                                null, // 保持索引一致
+                                { v: row.c[1]?.v }, // 第2列
+                                { v: row.c[2]?.v }  // 第3列
+                            ]
+                        }))
                     }
                 };
             } catch (error) {
-                console.error('處理數據時發生錯誤:', error);
+                console.error('解析數據時發生錯誤:', error);
                 console.error('錯誤堆疊:', error.stack);
                 return null;
             }
@@ -903,16 +924,19 @@ function replaceTextWithSheetData(text, data) {
     // 收集所有有效的替換規則
     data.table.rows.forEach((row, index) => {
         try {
-            if (!row.c || !Array.isArray(row.c) || row.c.length < 3) { // 確保至少有3欄
+            if (!row.c || !Array.isArray(row.c) || row.c.length < 3) {
                 console.log(`跳過第 ${index + 1} 行：數據結構無效`);
                 return;
             }
 
-            const originalValue = row.c[1]?.v; // 第2欄
-            const replacementValue = row.c[2]?.v; // 第3欄
+            const originalValue = row.c[1]?.v;
+            const replacementValue = row.c[2]?.v;
 
-            if (originalValue === undefined || replacementValue === undefined) {
-                console.log(`跳過第 ${index + 1} 行：值為空`);
+            if (!originalValue || !replacementValue) {
+                console.log(`跳過第 ${index + 1} 行：值為空`, {
+                    原文: originalValue,
+                    替換: replacementValue
+                });
                 return;
             }
 
