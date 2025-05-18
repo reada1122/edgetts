@@ -814,7 +814,7 @@ if (fileId) {
 
         function fetchSheetData(sheetId) {
     const base = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?`;
-    const query = encodeURIComponent('Select B, C'); // 明確只選 B 和 C 欄
+    const query = encodeURIComponent('Select B, C format B "", C ""'); // 使用 format 強制轉換為純文字
     const url = `${base}&tq=${query}`;
 
     return fetch(url)
@@ -822,7 +822,7 @@ if (fileId) {
         .then(rep => {
             const jsonStr = rep.match(/google\.visualization\.Query\.setResponse\(([\s\S]+)\);/)[1];
             const data = JSON.parse(jsonStr);
-            console.log("確認欄位對應:", data.table.rows[0].c); // 應為 [B欄, C欄]
+            console.log("確認欄位對應:", data.table.rows[0]?.c); // 應為 [B欄, C欄]
             return data;
         })
         .catch(err => {
@@ -834,10 +834,12 @@ if (fileId) {
 function replaceTextWithSheetData(text, data) {
     if (!data) return text;
     data.table.rows.forEach(row => {
-        const original = row.c[0]?.v; // B欄 (因為只選了 B 和 C)
-        const replacement = row.c[1]?.v; // C欄
+        // 確保資料存在且轉換為字串
+        const original = row.c[0]?.v?.toString() || ''; // B欄
+        const replacement = row.c[1]?.v?.toString() || ''; // C欄
         if (original && replacement) {
-            text = text.replace(new RegExp(original, "g"), replacement);
+            // 使用字串替換，確保都是純文字處理
+            text = text.replace(new RegExp(original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), "g"), replacement);
         }
     });
     return text;
