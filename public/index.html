@@ -904,24 +904,45 @@ function replaceTextWithSheetData(text, data) {
 
     // 收集所有有效的替換規則
     data.table.rows.forEach((row, index) => {
-        const original = row.c[0].v.trim();
-        const replacement = row.c[1].v.trim();
-        
-        if (original && replacement) {
-            try {
-                const regex = new RegExp(original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
-                replacements.push({
-                    original,
-                    replacement,
-                    regex
-                });
-                console.log(`成功載入替換規則 ${index + 1}:`, {
-                    原文: original,
-                    替換為: replacement
-                });
-            } catch (error) {
-                console.error(`建立替換規則時發生錯誤 (第 ${index + 1} 行):`, error);
+        try {
+            // 檢查並轉換值為字符串
+            const originalValue = row.c[0]?.v;
+            const replacementValue = row.c[1]?.v;
+            
+            // 將值轉換為字符串並去除空白
+            const original = String(originalValue || '').trim();
+            const replacement = String(replacementValue || '').trim();
+            
+            console.log(`處理第 ${index + 1} 行數據:`, {
+                原始值: originalValue,
+                替換值: replacementValue,
+                處理後原始值: original,
+                處理後替換值: replacement,
+                原始值類型: typeof originalValue,
+                替換值類型: typeof replacementValue
+            });
+
+            if (original && replacement) {
+                try {
+                    const regex = new RegExp(original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+                    replacements.push({
+                        original,
+                        replacement,
+                        regex
+                    });
+                    console.log(`成功載入替換規則 ${index + 1}:`, {
+                        原文: original,
+                        替換為: replacement
+                    });
+                } catch (error) {
+                    console.error(`建立替換規則時發生錯誤 (第 ${index + 1} 行):`, error);
+                }
+            } else {
+                console.log(`跳過第 ${index + 1} 行：空值或無效值`);
             }
+        } catch (error) {
+            console.error(`處理第 ${index + 1} 行數據時發生錯誤:`, error);
+            console.log('問題行的數據:', row);
         }
     });
 
