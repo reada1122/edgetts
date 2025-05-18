@@ -814,8 +814,8 @@ if (fileId) {
 
         function fetchSheetData(sheetId) {
     const base = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?`;
-    // 修改查詢以確保獲取所有數據
-    const query = encodeURIComponent('SELECT B, C');
+    // 修改查詢以獲取第2欄和第3欄
+    const query = encodeURIComponent('SELECT Col1, Col2');
     const url = `${base}&tq=${query}&headers=1`;
 
     console.log('正在請求 Google Sheet URL:', url);
@@ -849,7 +849,7 @@ if (fileId) {
                     return row && row.c && 
                            Array.isArray(row.c) && 
                            row.c.length >= 2 && 
-                           row.c[0] && row.c[1];
+                           row.c[1] && row.c[2]; // 檢查第2欄和第3欄
                 });
 
                 console.log('總行數（包含標題）:', data.table.rows.length);
@@ -858,10 +858,10 @@ if (fileId) {
                 // 檢查每一行的數據
                 rows.forEach((row, index) => {
                     console.log(`第 ${index + 1} 行數據:`, {
-                        B欄: row.c[0]?.v,
-                        C欄: row.c[1]?.v,
-                        B欄類型: typeof row.c[0]?.v,
-                        C欄類型: typeof row.c[1]?.v
+                        原語詞: row.c[1]?.v, // 第2欄
+                        替換語詞: row.c[2]?.v, // 第3欄
+                        原語詞類型: typeof row.c[1]?.v,
+                        替換語詞類型: typeof row.c[2]?.v
                     });
                 });
 
@@ -903,13 +903,13 @@ function replaceTextWithSheetData(text, data) {
     // 收集所有有效的替換規則
     data.table.rows.forEach((row, index) => {
         try {
-            if (!row.c || !Array.isArray(row.c) || row.c.length < 2) {
+            if (!row.c || !Array.isArray(row.c) || row.c.length < 3) { // 確保至少有3欄
                 console.log(`跳過第 ${index + 1} 行：數據結構無效`);
                 return;
             }
 
-            const originalValue = row.c[0]?.v;
-            const replacementValue = row.c[1]?.v;
+            const originalValue = row.c[1]?.v; // 第2欄
+            const replacementValue = row.c[2]?.v; // 第3欄
 
             if (originalValue === undefined || replacementValue === undefined) {
                 console.log(`跳過第 ${index + 1} 行：值為空`);
