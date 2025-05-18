@@ -814,22 +814,13 @@ if (fileId) {
 
         function fetchSheetData(sheetId) {
     const base = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?`;
-    // 不指定具體欄位，獲取所有數據
     const query = encodeURIComponent('SELECT *');
     const url = `${base}&tq=${query}&headers=1`;
 
-    console.log('正在請求 Google Sheet URL:', url);
-
     return fetch(url)
-        .then(res => {
-            console.log('收到回應狀態:', res.status);
-            return res.text();
-        })
+        .then(res => res.text())
         .then(rep => {
             try {
-                console.log('原始回應文本:', rep);
-                
-                // 提取 JSON 數據
                 const jsonData = rep.match(/google\.visualization\.Query\.setResponse\(([\s\S\n]*?)\);/);
                 if (!jsonData || !jsonData[1]) {
                     console.error('無法從回應中提取 JSON 數據');
@@ -837,70 +828,39 @@ if (fileId) {
                 }
 
                 const data = JSON.parse(jsonData[1]);
-                console.log('解析後的完整數據:', data);
+                console.log('解析後的數據:', data);
 
-                // 檢查數據結構
-                if (!data || !data.table || !data.table.rows || !Array.isArray(data.table.rows)) {
-                    console.error('數據結構不符合預期格式');
+                if (!data || !data.table || !data.table.rows) {
+                    console.error('數據結構不完整');
                     return null;
                 }
 
                 // 移除標題行並過濾有效數據
                 const rows = data.table.rows.slice(1).filter(row => {
-                    const isValid = row && 
-                                  row.c && 
-                                  Array.isArray(row.c) && 
-                                  row.c.length >= 3 && // 確保至少有3列
-                                  row.c[1] && row.c[2]; // 檢查第2列和第3列是否存在
-                    
-                    if (!isValid) {
-                        console.log('發現無效行:', row);
-                    }
-                    return isValid;
+                    if (!row || !row.c || !Array.isArray(row.c) || row.c.length < 3) return false;
+                    // 使用格式化值（f）或原始值（v）
+                    const col1 = row.c[1]?.f || row.c[1]?.v;
+                    const col2 = row.c[2]?.f || row.c[2]?.v;
+                    return col1 != null && col2 != null;
                 });
 
-                console.log('原始總行數:', data.table.rows.length);
                 console.log('有效數據行數:', rows.length);
-
-                // 檢查並記錄每行的內容
-                rows.forEach((row, index) => {
-                    const originalText = row.c[1]?.v;
-                    const replacementText = row.c[2]?.v;
-                    console.log(`第 ${index + 1} 行有效數據:`, {
-                        原文: originalText,
-                        替換: replacementText,
-                        原文類型: typeof originalText,
-                        替換類型: typeof replacementText
-                    });
-                });
-
-                // 如果沒有有效數據，返回 null
-                if (rows.length === 0) {
-                    console.log('沒有找到有效的替換規則數據');
-                    return null;
-                }
 
                 return {
                     table: {
                         rows: rows.map(row => ({
                             c: [
-                                null, // 保持索引一致
-                                { v: row.c[1]?.v }, // 第2列
-                                { v: row.c[2]?.v }  // 第3列
+                                null,
+                                { v: row.c[1].f || String(row.c[1].v) },
+                                { v: row.c[2].f || String(row.c[2].v) }
                             ]
                         }))
                     }
                 };
             } catch (error) {
-                console.error('解析數據時發生錯誤:', error);
-                console.error('錯誤堆疊:', error.stack);
+                console.error('處理數據時發生錯誤:', error);
                 return null;
             }
-        })
-        .catch(err => {
-            console.error('請求失敗:', err);
-            console.error('錯誤堆疊:', err.stack);
-            return null;
         });
 }
 
@@ -909,140 +869,41 @@ function replaceTextWithSheetData(text, data) {
         console.log("無效的 Google Sheet 數據");
         return text;
     }
-    
-    const totalRows = data.table.rows.length;
-    console.log(`開始處理替換，總行數: ${totalRows}`);
-    
-    if (totalRows === 0) {
-        console.log("沒有找到有效的替換規則");
-        return text;
-    }
 
     let replacedCount = 0;
     const replacements = [];
 
-    // 收集所有有效的替換規則
     data.table.rows.forEach((row, index) => {
         try {
-            if (!row.c || !Array.isArray(row.c) || row.c.length < 3) {
-                console.log(`跳過第 ${index + 1} 行：數據結構無效`);
-                return;
-            }
+            const original = String(row.c[1].v).trim();
+            const replacement = String(row.c[2].v).trim();
 
-            const originalValue = row.c[1]?.v;
-            const replacementValue = row.c[2]?.v;
-
-            if (!originalValue || !replacementValue) {
-                console.log(`跳過第 ${index + 1} 行：值為空`, {
-                    原文: originalValue,
-                    替換: replacementValue
-                });
-                return;
-            }
-
-            // 將值轉換為字符串並去除空白
-            const original = String(originalValue).trim();
-            const replacement = String(replacementValue).trim();
-
-            if (!original || !replacement) {
-                console.log(`跳過第 ${index + 1} 行：轉換後的值為空`);
-                return;
-            }
-
-            try {
+            if (original && replacement) {
                 const regex = new RegExp(original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
-                replacements.push({
-                    original,
-                    replacement,
-                    regex
-                });
-                console.log(`成功載入替換規則 ${index + 1}:`, {
-                    原文: original,
-                    替換為: replacement
-                });
-            } catch (error) {
-                console.error(`建立替換規則時發生錯誤 (第 ${index + 1} 行):`, error);
+                replacements.push({ original, replacement, regex });
+                console.log(`載入替換規則 ${index + 1}:`, { 原文: original, 替換為: replacement });
             }
         } catch (error) {
             console.error(`處理第 ${index + 1} 行時發生錯誤:`, error);
         }
     });
 
-    console.log(`載入替換規則完成，共 ${replacements.length} 條規則`);
-
-    // 執行替換
     let modifiedText = text;
     replacements.forEach((item, index) => {
         try {
             const newText = modifiedText.replace(item.regex, item.replacement);
             if (newText !== modifiedText) {
                 replacedCount++;
-                console.log(`第 ${index + 1} 條規則替換成功:`, {
-                    原文: item.original,
-                    替換為: item.replacement
-                });
+                console.log(`替換成功: ${item.original} -> ${item.replacement}`);
             }
             modifiedText = newText;
         } catch (error) {
-            console.error(`執行替換時發生錯誤 (規則 ${index + 1}):`, error);
+            console.error(`替換時發生錯誤:`, error);
         }
     });
 
-    console.log(`替換完成，共執行 ${replacedCount} 次成功替換`);
+    console.log(`完成替換，共執行 ${replacedCount} 次替換`);
     return modifiedText;
-}
- async function sendTextToTTS(selectedText, callback) {
-    const cleanedText = selectedText.replace(/\s+/g, '');
-    let filteredText = cleanedText; // Initialize with cleanedText as fallback
-    
-    const sheetId = getSheetIdFromUrl();
-    if (sheetId) {
-        console.log("檢測到 Google Sheet ID:", sheetId);
-        const data = await fetchSheetData(sheetId);
-        if (data) {
-            console.log("成功獲取 Google Sheet 數據");
-            filteredText = replaceTextWithSheetData(cleanedText, data);
-        } else {
-            console.log("無法獲取 Google Sheet 數據，使用原始文本");
-        }
-    }
-    
-    console.log("最終送出給 TTS 的文本:", filteredText);
-    // 獲取選擇的聲音和語速
-    const voiceName = document.getElementById("voiceSelect").value;
-    const ratePercent = parseFloat(document.getElementById('speakSpeed').value); // 使用百分比
-
-    // 生成 SSML
-    const ssml = createSSML(filteredText, voiceName, ratePercent);
-
-    // 發送請求到 TTS API
-    fetch('/api/ra', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'text/plain',
-            'Format': 'audio-24khz-96kbitrate-mono-mp3',
-        },
-        body: ssml,
-    })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error(`請求失敗：${response.statusText}`);
-        }
-        return response.blob();
-    })
-    .then(audioBlob => {
-        const audioUrl = URL.createObjectURL(audioBlob);
-        const audioPlayer = document.getElementById('audioPlayer');
-        audioPlayer.src = audioUrl;
-        audioPlayer.play(); // 自動播放
-
-        // 設置音頻播放完成後的回調
-        audioPlayer.onended = callback;
-    })
-    .catch(error => {
-        console.error('發生錯誤：', error);
-        alert('無法播放語音，請檢查網絡連接或稍後重試。');
-    });
 }
 
         function createSSML(text, voiceName, ratePercent) {
