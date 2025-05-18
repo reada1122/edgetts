@@ -814,160 +814,80 @@ if (fileId) {
 
         function fetchSheetData(sheetId) {
     const base = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?`;
-    const query = encodeURIComponent('SELECT *');
-    const url = `${base}&tq=${query}&headers=1`;
+    const query = encodeURIComponent('Select B, C'); // 明確只選 B 和 C 欄
+    const url = `${base}&tq=${query}`;
 
     return fetch(url)
         .then(res => res.text())
         .then(rep => {
-            try {
-                const jsonData = rep.match(/google\.visualization\.Query\.setResponse\(([\s\S\n]*?)\);/);
-                if (!jsonData || !jsonData[1]) {
-                    console.error('無法從回應中提取 JSON 數據');
-                    return null;
-                }
-
-                const data = JSON.parse(jsonData[1]);
-                console.log('解析後的數據:', data);
-
-                if (!data || !data.table || !data.table.rows) {
-                    console.error('數據結構不完整');
-                    return null;
-                }
-
-                // 移除標題行並過濾有效數據
-                const rows = data.table.rows.slice(1).filter(row => {
-                    if (!row || !row.c || !Array.isArray(row.c) || row.c.length < 3) return false;
-                    // 使用格式化值（f）或原始值（v）
-                    const col1 = row.c[1]?.f || row.c[1]?.v;
-                    const col2 = row.c[2]?.f || row.c[2]?.v;
-                    return col1 != null && col2 != null;
-                });
-
-                console.log('有效數據行數:', rows.length);
-
-                return {
-                    table: {
-                        rows: rows.map(row => ({
-                            c: [
-                                null,
-                                { v: row.c[1].f || String(row.c[1].v) },
-                                { v: row.c[2].f || String(row.c[2].v) }
-                            ]
-                        }))
-                    }
-                };
-            } catch (error) {
-                console.error('處理數據時發生錯誤:', error);
-                return null;
-            }
+            const jsonStr = rep.match(/google\.visualization\.Query\.setResponse\(([\s\S]+)\);/)[1];
+            const data = JSON.parse(jsonStr);
+            console.log("確認欄位對應:", data.table.rows[0].c); // 應為 [B欄, C欄]
+            return data;
+        })
+        .catch(err => {
+            console.error('載入失敗:', err);
+            return null;
         });
 }
 
 function replaceTextWithSheetData(text, data) {
-    if (!data || !data.table || !data.table.rows) {
-        console.log("無效的 Google Sheet 數據");
-        return text;
-    }
-
-    let replacedCount = 0;
-    const replacements = [];
-
-    data.table.rows.forEach((row, index) => {
-        try {
-            const original = String(row.c[1].v).trim();
-            const replacement = String(row.c[2].v).trim();
-
-            if (original && replacement) {
-                const regex = new RegExp(original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
-                replacements.push({ original, replacement, regex });
-                console.log(`載入替換規則 ${index + 1}:`, { 原文: original, 替換為: replacement });
-            }
-        } catch (error) {
-            console.error(`處理第 ${index + 1} 行時發生錯誤:`, error);
+    if (!data) return text;
+    data.table.rows.forEach(row => {
+        const original = row.c[0]?.v; // B欄 (因為只選了 B 和 C)
+        const replacement = row.c[1]?.v; // C欄
+        if (original && replacement) {
+            text = text.replace(new RegExp(original, "g"), replacement);
         }
     });
-
-    let modifiedText = text;
-    replacements.forEach((item, index) => {
-        try {
-            const newText = modifiedText.replace(item.regex, item.replacement);
-            if (newText !== modifiedText) {
-                replacedCount++;
-                console.log(`替換成功: ${item.original} -> ${item.replacement}`);
-            }
-            modifiedText = newText;
-        } catch (error) {
-            console.error(`替換時發生錯誤:`, error);
-        }
-    });
-
-    console.log(`完成替換，共執行 ${replacedCount} 次替換`);
-    return modifiedText;
+    return text;
 }
+ async function sendTextToTTS(selectedText, callback) {
+    const cleanedText = selectedText.replace(/\s+/g, '');
+    let filteredText = cleanedText; // Initialize with cleanedText as fallback
+    
+    const sheetId = getSheetIdFromUrl();
+    if (sheetId) {
+        const data = await fetchSheetData(sheetId);
+        filteredText = replaceTextWithSheetData(cleanedText, data);
+    }
+    
+    console.log("送出給 TTS 的文本:", filteredText);
+    // 獲取選擇的聲音和語速
+    const voiceName = document.getElementById("voiceSelect").value;
+    const ratePercent = parseFloat(document.getElementById('speakSpeed').value); // 使用百分比
 
-async function sendTextToTTS(text, callback) {
-    try {
-        // 檢查是否有Google Sheet ID
-        const sheetId = getSheetIdFromUrl();
-        let processedText = text;
+    // 生成 SSML
+    const ssml = createSSML(filteredText, voiceName, ratePercent);
 
-        if (sheetId) {
-            try {
-                const sheetData = await fetchSheetData(sheetId);
-                if (sheetData) {
-                    processedText = replaceTextWithSheetData(text, sheetData);
-                }
-            } catch (error) {
-                console.error('處理Google Sheet數據時發生錯誤:', error);
-            }
-        }
-
-        // 獲取選擇的語音和語速
-        const voiceSelect = document.getElementById('voiceSelect');
-        const speedInput = document.getElementById('speakSpeed');
-        const selectedVoice = voiceSelect.value;
-        const speedRate = parseInt(speedInput.value);
-
-        // 建立SSML
-        const ssml = createSSML(processedText, selectedVoice, speedRate);
-
-        // 發送到Azure TTS服務
-        const response = await fetch('https://eastus.tts.speech.microsoft.com/cognitiveservices/v1', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/ssml+xml',
-                'X-Microsoft-OutputFormat': 'audio-16khz-32kbitrate-mono-mp3',
-                'Ocp-Apim-Subscription-Key': '2bb6d5a6d8f24382bfb4cce5d2c9f489'
-            },
-            body: ssml
-        });
-
+    // 發送請求到 TTS API
+    fetch('/api/ra', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'text/plain',
+            'Format': 'audio-24khz-96kbitrate-mono-mp3',
+        },
+        body: ssml,
+    })
+    .then(response => {
         if (!response.ok) {
-            throw new Error(`TTS請求失敗: ${response.status} ${response.statusText}`);
+            throw new Error(`請求失敗：${response.statusText}`);
         }
-
-        // 獲取音頻數據並播放
-        const audioBlob = await response.blob();
+        return response.blob();
+    })
+    .then(audioBlob => {
         const audioUrl = URL.createObjectURL(audioBlob);
         const audioPlayer = document.getElementById('audioPlayer');
-        
         audioPlayer.src = audioUrl;
-        audioPlayer.onended = () => {
-            URL.revokeObjectURL(audioUrl);
-            if (callback) callback();
-        };
-        
-        await audioPlayer.play();
-    } catch (error) {
-        console.error('TTS處理過程中發生錯誤:', error);
-        Swal.fire({
-            icon: 'error',
-            title: '語音合成失敗',
-            text: '無法生成語音，請稍後再試。'
-        });
-        if (callback) callback();
-    }
+        audioPlayer.play(); // 自動播放
+
+        // 設置音頻播放完成後的回調
+        audioPlayer.onended = callback;
+    })
+    .catch(error => {
+        console.error('發生錯誤：', error);
+        alert('無法播放語音，請檢查網絡連接或稍後重試。');
+    });
 }
 
         function createSSML(text, voiceName, ratePercent) {
