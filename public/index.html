@@ -794,7 +794,7 @@ if (fileId) {
 </script>
  <script>
   
-  let selectedFile = null;  
+let selectedFile = null;  
   let isListening = true; // 初始設置為監聽模式
   let isReading = false; // 初始設置為未閱讀狀態
   let audioPlayer = null;
@@ -812,7 +812,7 @@ if (fileId) {
             return urlParams.get('googlesheetid');
         }
 
-       function fetchSheetData(sheetId) {
+        function fetchSheetData(sheetId) {
             const base = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?`;
             const query = encodeURIComponent('Select *');
             const url = `${base}&tq=${query}`;
@@ -837,23 +837,18 @@ if (fileId) {
 
             return text;
         }
+
  async function sendTextToTTS(selectedText, callback) {
     const cleanedText = selectedText.replace(/\s+/g, '');
     let filteredText = cleanedText; // Initialize with cleanedText as fallback
     
     const sheetId = getSheetIdFromUrl();
     if (sheetId) {
-        console.log("檢測到 Google Sheet ID:", sheetId);
         const data = await fetchSheetData(sheetId);
-        if (data) {
-            console.log("成功獲取 Google Sheet 數據");
-            filteredText = replaceTextWithSheetData(cleanedText, data);
-        } else {
-            console.log("無法獲取 Google Sheet 數據，使用原始文本");
-        }
+        filteredText = replaceTextWithSheetData(cleanedText, data);
     }
     
-    console.log("最終送出給 TTS 的文本:", filteredText);
+    console.log("送出給 TTS 的文本:", filteredText);
     // 獲取選擇的聲音和語速
     const voiceName = document.getElementById("voiceSelect").value;
     const ratePercent = parseFloat(document.getElementById('speakSpeed').value); // 使用百分比
