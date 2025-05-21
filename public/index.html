@@ -81,6 +81,7 @@ audio {
             text-transform: inherit;
             font-weight: inherit;
             font-style: inherit;
+            transform-origin: 0% 0%;
         }
         .textLayer > span {
             position: absolute;
@@ -95,6 +96,8 @@ audio {
             text-transform: inherit;
             font-weight: inherit;
             font-style: inherit;
+            vertical-align: baseline;
+            display: inline-block;
         }
 		  .no-select {
         user-select: none; /* 禁用反白選取 */
@@ -407,7 +410,7 @@ function renderPage(pageNum) {
                 fontSize: textContent.styles[0]?.fontSize || 'inherit'
             });
             
-            // 應用字型樣式
+            // 應用字型樣式並修正對齊
             const textSpans = textLayerDiv.getElementsByTagName('span');
             for (let span of textSpans) {
                 const style = textContent.styles[span.style.fontFamily];
@@ -418,10 +421,23 @@ function renderPage(pageNum) {
                     span.style.fontStyle = style.fontStyle;
                     span.style.letterSpacing = style.letterSpacing + 'px';
                     span.style.wordSpacing = style.wordSpacing + 'px';
+                    
+                    // 修正垂直對齊
+                    const transform = span.style.transform;
+                    if (transform) {
+                        const match = transform.match(/translate\(([^,]+),([^)]+)\)/);
+                        if (match) {
+                            const x = parseFloat(match[1]);
+                            const y = parseFloat(match[2]);
+                            // 調整垂直位置以匹配圖層
+                            span.style.transform = `translate(${x}px, ${y + 1}px)`;
+                        }
+                    }
                 }
             }
             
-            textLayerDiv.style.top = '-8px';
+            // 移除之前的 top 偏移
+            textLayerDiv.style.top = '0px';
         });
 
         pageNumberSpan.textContent = `Page ${pageNum} of ${pdfDoc.numPages}`;
