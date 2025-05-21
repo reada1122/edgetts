@@ -73,31 +73,12 @@ audio {
             height: 100%;
             overflow: hidden;
             color:rgba(255,255,255,0);
-            font-family: inherit;
-            font-size: inherit;
-            line-height: inherit;
-            letter-spacing: inherit;
-            word-spacing: inherit;
-            text-transform: inherit;
-            font-weight: inherit;
-            font-style: inherit;
-            transform-origin: 0% 0%;
         }
         .textLayer > span {
             position: absolute;
             white-space: pre;
             cursor: text;
             transform-origin: 0% 0%;
-            font-family: inherit;
-            font-size: inherit;
-            line-height: inherit;
-            letter-spacing: inherit;
-            word-spacing: inherit;
-            text-transform: inherit;
-            font-weight: inherit;
-            font-style: inherit;
-            vertical-align: baseline;
-            display: inline-block;
         }
 		  .no-select {
         user-select: none; /* 禁用反白選取 */
@@ -404,52 +385,20 @@ function renderPage(pageNum) {
                 textContent: textContent,
                 container: textLayerDiv,
                 viewport: scaledViewport,
-                textDivs: [],
-                enhanceTextSelection: true,
-                fontFamily: textContent.styles[0]?.fontFamily || 'inherit',
-                fontSize: textContent.styles[0]?.fontSize || 'inherit'
             });
-            
-            // 應用字型樣式並修正對齊
-            const textSpans = textLayerDiv.getElementsByTagName('span');
-            for (let span of textSpans) {
-                const style = textContent.styles[span.style.fontFamily];
-                if (style) {
-                    span.style.fontFamily = style.fontFamily;
-                    span.style.fontSize = style.fontSize + 'px';
-                    span.style.fontWeight = style.fontWeight;
-                    span.style.fontStyle = style.fontStyle;
-                    span.style.letterSpacing = style.letterSpacing + 'px';
-                    span.style.wordSpacing = style.wordSpacing + 'px';
-                    
-                    // 修正垂直對齊
-                    const transform = span.style.transform;
-                    if (transform) {
-                        const match = transform.match(/translate\(([^,]+),([^)]+)\)/);
-                        if (match) {
-                            const x = parseFloat(match[1]);
-                            const y = parseFloat(match[2]);
-                            // 調整垂直位置以匹配圖層
-                            span.style.transform = `translate(${x}px, ${y + 1}px)`;
-                        }
-                    }
-                }
-            }
-            
-            // 移除之前的 top 偏移
-            textLayerDiv.style.top = '0px';
+            textLayerDiv.style.top = '-8px';
         });
 
         pageNumberSpan.textContent = `Page ${pageNum} of ${pdfDoc.numPages}`;
         
-        // 更新hash但不觸發hashchange
-        const currentHash = window.location.hash;
-        const newHash = `page=${pageNum}`;
-        if (currentHash !== newHash) {
-            const newUrl = new URL(window.location.href);
-            newUrl.hash = newHash;
-            window.history.replaceState({}, '', newUrl);
-        }
+         // 更新hash但不觸發hashchange
+    const currentHash = window.location.hash;
+    const newHash = `page=${pageNum}`;
+    if (currentHash !== newHash) {
+        const newUrl = new URL(window.location.href);
+        newUrl.hash = newHash;
+        window.history.replaceState({}, '', newUrl);
+    }
     });
 }
 	
