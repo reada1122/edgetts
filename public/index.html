@@ -80,15 +80,7 @@ audio {
             cursor: text;
             transform-origin: 0% 0%;
         }
-	/* 添加英文和數字的垂直位置調整 */
-        .textLayer > span:not(:lang(zh)) {
-            transform: translateY(-8px);
-        }
-        /* 確保中文文字不受影響 */
-        .textLayer > span:lang(zh) {
-            transform: none;
-        }
-		  .no-select {
+	  .no-select {
         user-select: none; /* 禁用反白選取 */
         -webkit-user-select: none; /* 禁用反白選取 for Safari */
         -moz-user-select: none; /* 禁用反白選取 for Firefox */
