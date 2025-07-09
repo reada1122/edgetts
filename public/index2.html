@@ -1436,11 +1436,9 @@ async function readTextInsideFrame() {
             const aiDescription = await geminiImageDescribe(base64Image);
             Swal.close();
             console.log('Gemini 原始回傳:', aiDescription);
-            const cleanedDesc = aiDescription.trim().replace(/[\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
-            console.log('Gemini 清理後:', cleanedDesc);
-            if (cleanedDesc && cleanedDesc.length > 0) {
-                // 直接呼叫 sendTextToTTS，不需要包在 Promise 裡
-                sendTextToTTS(cleanedDesc, () => {
+            if (aiDescription && aiDescription.length > 0) {
+                // 直接使用 Gemini 原始回傳，不進行任何清理
+                sendTextToTTS(aiDescription, () => {
                     console.log('圖片辨識文字朗讀完成');
                 });
             } else {
