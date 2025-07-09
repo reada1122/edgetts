@@ -248,6 +248,30 @@ input[type=range]::-moz-range-thumb {
     .swal-high-z-index {
         z-index: 9999 !important;
     }
+
+    /* SweetAlert2 全域高 z-index，確保永遠在最上層 */
+    .swal2-container,
+    .swal2-popup,
+    .swal2-modal,
+    .swal2-backdrop,
+    .swal2-shown,
+    .swal2-height-auto,
+    .swal2-icon,
+    .swal2-title,
+    .swal2-content,
+    .swal2-actions,
+    .swal2-styled,
+    .swal2-close,
+    .swal2-validation-message,
+    .swal2-html-container,
+    .swal2-loader,
+    .swal2-progress-steps,
+    .swal2-backdrop-show,
+    .swal2-backdrop-hide,
+    .swal2-noanimation,
+    .swal2-toast {
+      z-index: 10010 !important;
+    }
     </style>
 	  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.js"></script>
