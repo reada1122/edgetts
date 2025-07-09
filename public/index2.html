@@ -243,6 +243,11 @@ input[type=range]::-moz-range-thumb {
             transform-origin: right center; /* 設置旋轉中心 */
 
         }
+    
+    /* SweetAlert2 高 z-index 樣式 */
+    .swal-high-z-index {
+        z-index: 9999 !important;
+    }
     </style>
 	  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.js"></script>
@@ -1429,6 +1434,9 @@ async function readTextInsideFrame() {
                 title: '正在辨識圖片',
                 text: '正在使用 AI 辨識圖片內容...（Gemini）',
                 allowOutsideClick: false,
+                customClass: {
+                    popup: 'swal-high-z-index'
+                },
                 didOpen: () => {
                     Swal.showLoading();
                 }
