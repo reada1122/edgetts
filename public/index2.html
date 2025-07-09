@@ -958,7 +958,7 @@ function replaceTextWithSheetData(text, data) {
 
     // 生成 SSML
     const ssml = createSSML(filteredText, voiceName, ratePercent);
-    console.log("生成的 SSML:", ssml);
+    //console.log("生成的 SSML:", ssml);
 
     // 發送請求到 TTS API
     fetch('/api/ra', {
@@ -970,14 +970,14 @@ function replaceTextWithSheetData(text, data) {
         body: ssml,
     })
     .then(response => {
-        console.log('TTS API 回應狀態:', response.status);
+        //console.log('TTS API 回應狀態:', response.status);
         if (!response.ok) {
             throw new Error(`請求失敗：${response.status} ${response.statusText}`);
         }
         return response.blob();
     })
     .then(audioBlob => {
-        console.log('收到音頻 blob，大小:', audioBlob.size);
+        //console.log('收到音頻 blob，大小:', audioBlob.size);
         const audioUrl = URL.createObjectURL(audioBlob);
         const audioPlayer = document.getElementById('audioPlayer');
         audioPlayer.src = audioUrl;
@@ -1435,7 +1435,7 @@ async function readTextInsideFrame() {
             });
             const aiDescription = await geminiImageDescribe(base64Image);
             Swal.close();
-            console.log('Gemini 原始回傳:', aiDescription);
+            //console.log('Gemini 原始回傳:', aiDescription);
             if (aiDescription && aiDescription.length > 0) {
                 // 直接使用 Gemini 原始回傳，不進行任何清理
                 sendTextToTTS(aiDescription, () => {
