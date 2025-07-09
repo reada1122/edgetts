@@ -927,7 +927,13 @@ function replaceTextWithSheetData(text, data) {
     return text;
 }
  async function sendTextToTTS(selectedText, callback) {
-    const cleanedText = selectedText.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+    // 加強文字清理，移除可能導致 SSML 解析錯誤的特殊字符
+    const cleanedText = selectedText
+        .replace(/[\r\n]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/[<>&]/g, '') // 移除 SSML 特殊字符
+        .trim();
+    
     let filteredText = cleanedText; // Initialize with cleanedText as fallback
     
     const sheetId = getSheetIdFromUrl();
@@ -937,12 +943,22 @@ function replaceTextWithSheetData(text, data) {
     }
     
     console.log("送出給 TTS 的文本:", filteredText);
+    console.log("文本長度:", filteredText.length);
+    
+    // 檢查文本是否為空
+    if (!filteredText || filteredText.length === 0) {
+        console.error('TTS 文本為空，無法朗讀');
+        if (callback) callback();
+        return;
+    }
+    
     // 獲取選擇的聲音和語速
     const voiceName = document.getElementById("voiceSelect").value;
     const ratePercent = parseFloat(document.getElementById('speakSpeed').value); // 使用百分比
 
     // 生成 SSML
     const ssml = createSSML(filteredText, voiceName, ratePercent);
+    console.log("生成的 SSML:", ssml);
 
     // 發送請求到 TTS API
     fetch('/api/ra', {
@@ -954,12 +970,14 @@ function replaceTextWithSheetData(text, data) {
         body: ssml,
     })
     .then(response => {
+        console.log('TTS API 回應狀態:', response.status);
         if (!response.ok) {
-            throw new Error(`請求失敗：${response.statusText}`);
+            throw new Error(`請求失敗：${response.status} ${response.statusText}`);
         }
         return response.blob();
     })
     .then(audioBlob => {
+        console.log('收到音頻 blob，大小:', audioBlob.size);
         const audioUrl = URL.createObjectURL(audioBlob);
         const audioPlayer = document.getElementById('audioPlayer');
         audioPlayer.src = audioUrl;
@@ -969,8 +987,9 @@ function replaceTextWithSheetData(text, data) {
         audioPlayer.onended = callback;
     })
     .catch(error => {
-        console.error('發生錯誤：', error);
+        console.error('TTS 發生錯誤：', error);
         alert('無法播放語音，請檢查網絡連接或稍後重試。');
+        if (callback) callback();
     });
 }
 
@@ -1416,12 +1435,20 @@ async function readTextInsideFrame() {
             });
             const aiDescription = await geminiImageDescribe(base64Image);
             Swal.close();
+            console.log('Gemini 原始回傳:', aiDescription);
             const cleanedDesc = aiDescription.trim().replace(/[\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+            console.log('Gemini 清理後:', cleanedDesc);
             if (cleanedDesc && cleanedDesc.length > 0) {
-                await new Promise((resolve, reject) => {
-                    sendTextToTTS(cleanedDesc, () => {
-                        resolve();
-                    });
+                // 直接呼叫 sendTextToTTS，不需要包在 Promise 裡
+                sendTextToTTS(cleanedDesc, () => {
+                    console.log('圖片辨識文字朗讀完成');
+                });
+            } else {
+                console.error('Gemini 回傳的內容為空');
+                Swal.fire({
+                    icon: 'warning',
+                    title: '辨識結果為空',
+                    text: 'AI 無法辨識圖片內容'
                 });
             }
         } catch (error) {
