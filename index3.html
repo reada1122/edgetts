@@ -1013,13 +1013,15 @@ function replaceTextWithSheetData(text, data) {
     
     // 獲取選擇的聲音和語速
     const voiceName = document.getElementById("voiceSelect").value;
-    const ratePercent = parseFloat(document.getElementById('speakSpeed').value); // 使用百分比
+    const rateValueRaw = parseFloat(document.getElementById('speakSpeed').value);
+    const rateValue = Math.max(-50, Math.min(50, isNaN(rateValueRaw) ? 0 : rateValueRaw));
+    const rateString = `${rateValue >= 0 ? '+' : ''}${rateValue}%`;
 
     // 構建 API 請求參數
     const requestData = {
         text: filteredText,
         voice: voiceName,
-        rate: `${ratePercent}%`,
+        rate: rateString,
         volume: "+0%",
         pitch: "+0Hz"
     };
@@ -1830,7 +1832,7 @@ function showPage(page_no) {
 
      // 更新語速顯示
 function updateRate(value) {
-    const adjustedValue = value;
+    const adjustedValue = Math.max(-50, Math.min(50, Number(value)));
     const speedLabel = document.getElementById('speedLabel');
     const speedPercent = document.getElementById('speedPercent');
     
