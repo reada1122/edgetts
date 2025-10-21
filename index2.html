@@ -690,7 +690,7 @@ window.addEventListener('load', async () => {
                         console.error('檔案讀取失敗：', fileReader.error);
                         alert('檔案讀取失敗，請重試。');
                     };
-                    fileReader.readAsArrayBuffer(file);
+                    fileReader.sArrayBuffer(file);
                 } else {
                     console.log('IndexedDB 中沒有匹配的本地檔案，清除 URL 參數');
                     updateUrl(null);
@@ -721,7 +721,7 @@ window.addEventListener('load', async () => {
                             console.error('檔案讀取失敗：', fileReader.error);
                             alert('檔案讀取失敗，請重試。');
                         };
-                        fileReader.readAsArrayBuffer(file);
+                        fileReader.sArrayBuffer(file);
                     } else {
                         await clearIndexedDB();
                         await saveFileToIndexedDB(file);
@@ -779,7 +779,7 @@ pdfFileInput.addEventListener('change', async (event) => {
                 console.error('檔案讀取失敗：', fileReader.error);
                 alert('檔案讀取失敗，請重試。');
             };
-            fileReader.readAsArrayBuffer(file);
+            fileReader.sArrayBuffer(file);
         } catch (error) {
             console.error('保存檔案失敗：', error);
             alert('保存檔案失敗，請重試。');
@@ -907,7 +907,7 @@ if (clearCacheButton) {
   
   // API 配置
   const API_CONFIG = {
-    BASE_URL: 'https://reada-tts.hf.space', // Hugging Face Spaces TTS API
+    BASE_URL: 'https://readatts-tts.hf.space', // Hugging Face Spaces TTS API
     TTS_ENDPOINT: '/tts',
     VOICES_ENDPOINT: '/voices'
   };
