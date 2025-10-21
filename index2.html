@@ -690,7 +690,7 @@ window.addEventListener('load', async () => {
                         console.error('檔案讀取失敗：', fileReader.error);
                         alert('檔案讀取失敗，請重試。');
                     };
-                    fileReader.sArrayBuffer(file);
+                    fileReader.readAsArrayBuffer(file);
                 } else {
                     console.log('IndexedDB 中沒有匹配的本地檔案，清除 URL 參數');
                     updateUrl(null);
@@ -721,7 +721,7 @@ window.addEventListener('load', async () => {
                             console.error('檔案讀取失敗：', fileReader.error);
                             alert('檔案讀取失敗，請重試。');
                         };
-                        fileReader.sArrayBuffer(file);
+                        fileReader.readAsArrayBuffer(file);
                     } else {
                         await clearIndexedDB();
                         await saveFileToIndexedDB(file);
@@ -779,7 +779,7 @@ pdfFileInput.addEventListener('change', async (event) => {
                 console.error('檔案讀取失敗：', fileReader.error);
                 alert('檔案讀取失敗，請重試。');
             };
-            fileReader.sArrayBuffer(file);
+            fileReader.readAsArrayBuffer(file);
         } catch (error) {
             console.error('保存檔案失敗：', error);
             alert('保存檔案失敗，請重試。');
