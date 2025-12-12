@@ -511,7 +511,7 @@ const openDB = () => {
         request.onupgradeneeded = (e) => {
             const db = e.target.result;
             if (!db.objectStoreNames.contains('pdfFiles')) {
-                db.createObjectStore('pdfFiles', { keyPath: 'id' });
+                db.createObjectStore('pdfFiles', { Path: 'id' });
             }
         };
         request.onsuccess = (e) => resolve(e.target.result);
