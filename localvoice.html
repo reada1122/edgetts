@@ -500,12 +500,15 @@ const gasUrl = 'https://script.google.com/macros/s/AKfycbz22gIlfLOry1KdMW5A2NlcO
 // 打開 IndexedDB 資料庫
 const openDB = () => {
     return new Promise((resolve, reject) => {
-        const request = indexedDB.open('pdfDB', 1);
+        const request = indexedDB.open('pdfDB', 2); // 升級到版本 2 以匹配 index2.html
         request.onupgradeneeded = (e) => {
             const db = e.target.result;
-            if (!db.objectStoreNames.contains('pdfFiles')) {
-                db.createObjectStore('pdfFiles', { keyPath: 'id' });
+            // 如果 objectStore 已存在，先刪除再重新創建以確保配置正確
+            if (db.objectStoreNames.contains('pdfFiles')) {
+                db.deleteObjectStore('pdfFiles');
             }
+            // 重新創建 objectStore，確保使用 keyPath: 'id'
+            db.createObjectStore('pdfFiles', { keyPath: 'id' });
         };
         request.onsuccess = (e) => resolve(e.target.result);
         request.onerror = (e) => reject(e.target.error);
@@ -518,7 +521,21 @@ const saveFileToIndexedDB = async (file) => {
         const db = await openDB();
         const transaction = db.transaction('pdfFiles', 'readwrite');
         const store = transaction.objectStore('pdfFiles');
-        store.put({ id: 'currentPdf', file });
+        
+        // 確保對象有 id 屬性，並等待 put 操作完成
+        const dataToStore = { id: 'currentPdf', file: file };
+        const putRequest = store.put(dataToStore);
+        
+        return new Promise((resolve, reject) => {
+            putRequest.onsuccess = () => {
+                // put 操作成功，等待 transaction 完成
+            };
+            putRequest.onerror = () => reject(putRequest.error);
+            
+            // 監聽 transaction 完成
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+        });
     } catch (error) {
         console.error('保存檔案到 IndexedDB 失敗：', error);
         throw error;
