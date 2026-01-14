@@ -1680,98 +1680,14 @@ async function readTextInsideFrame() {
     // 沒有 PDF 文字層，才送圖片給 AI
     if (hasImageContent) {
         // 在 iOS 上，需要在用戶交互的同步上下文中立即獲取音頻播放權限
-        // 這樣在異步圖片辨識完成後才能自動播放
-        const audioPlayer = document.getElementById('audioPlayer');
-        if (audioPlayer) {
-            try {
-                // 保存原始狀態
-                const originalSrc = audioPlayer.src;
-                const originalVolume = audioPlayer.volume;
-                
-                // 暫時設置錯誤處理為空函數，避免顯示錯誤
-                const tempErrorHandler = () => {
-                    // 靜默處理錯誤，不顯示
-                };
-                audioPlayer.onerror = tempErrorHandler;
-                
-                // 使用一個有效的靜音音頻 URL（更短的靜音 WAV）
-                // 這是一個有效的 44.1kHz 單聲道靜音 WAV 文件（約 0.01 秒）
-                const silentAudio = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
-                
-                // 設置靜音音頻並立即播放以獲取權限
-                audioPlayer.src = silentAudio;
-                audioPlayer.volume = 0;
-                audioPlayer.muted = true;
-                
-                // 設置超時，確保即使播放失敗也能恢復
-                const restoreTimeout = setTimeout(() => {
-                    audioPlayer.pause();
-                    audioPlayer.currentTime = 0;
-                    audioPlayer.volume = originalVolume;
-                    audioPlayer.muted = false;
-                    if (originalSrc) {
-                        audioPlayer.src = originalSrc;
-                    } else {
-                        audioPlayer.src = '';
-                        audioPlayer.load();
-                    }
-                    audioPlayer.onerror = null; // 清除錯誤處理
-                }, 100);
-                
-                const playPromise = audioPlayer.play();
-                if (playPromise !== undefined) {
-                    playPromise
-                        .then(() => {
-                            clearTimeout(restoreTimeout);
-                            // 立即暫停並恢復狀態
-                            audioPlayer.pause();
-                            audioPlayer.currentTime = 0;
-                            audioPlayer.volume = originalVolume;
-                            audioPlayer.muted = false;
-                            if (originalSrc) {
-                                audioPlayer.src = originalSrc;
-                            } else {
-                                audioPlayer.src = '';
-                                audioPlayer.load();
-                            }
-                            audioPlayer.onerror = null; // 清除錯誤處理
-                        })
-                        .catch(() => {
-                            clearTimeout(restoreTimeout);
-                            // 權限獲取失敗也繼續，恢復狀態
-                            audioPlayer.volume = originalVolume;
-                            audioPlayer.muted = false;
-                            if (originalSrc) {
-                                audioPlayer.src = originalSrc;
-                            } else {
-                                audioPlayer.src = '';
-                                audioPlayer.load();
-                            }
-                            audioPlayer.onerror = null; // 清除錯誤處理
-                        });
-                } else {
-                    clearTimeout(restoreTimeout);
-                    // 如果沒有播放 Promise，直接恢復狀態
-                    audioPlayer.volume = originalVolume;
-                    audioPlayer.muted = false;
-                    if (originalSrc) {
-                        audioPlayer.src = originalSrc;
-                    } else {
-                        audioPlayer.src = '';
-                        audioPlayer.load();
-                    }
-                    audioPlayer.onerror = null; // 清除錯誤處理
-                }
-            } catch (error) {
-                console.log('獲取音頻播放權限時發生錯誤:', error);
-                // 確保清除錯誤狀態
-                if (audioPlayer) {
-                    audioPlayer.onerror = null;
-                    audioPlayer.src = '';
-                    audioPlayer.load();
-                }
-            }
-        }
+        // 通過播放"辨識中請稍候"來獲取權限，同時給用戶提示
+        let permissionObtained = false;
+        
+        // 立即在用戶交互上下文中播放"辨識中請稍候"以獲取權限
+        sendTextToTTS('辨識中請稍候', () => {
+            permissionObtained = true;
+            console.log('播放權限已獲取，開始圖片辨識');
+        });
         
         try {
             Swal.fire({
@@ -1789,7 +1705,16 @@ async function readTextInsideFrame() {
             Swal.close();
             //console.log('Gemini 原始回傳:', aiDescription);
             if (aiDescription && aiDescription.length > 0) {
+                // 等待"辨識中請稍候"播放完成（或至少等待一小段時間確保權限已獲取）
+                // 如果還在播放，停止它
+                const audioPlayer = document.getElementById('audioPlayer');
+                if (audioPlayer && !audioPlayer.paused) {
+                    audioPlayer.pause();
+                    audioPlayer.currentTime = 0;
+                }
+                
                 // 直接使用 Gemini 原始回傳，不進行任何清理
+                // 此時已經獲取了播放權限，可以自動播放
                 sendTextToTTS(aiDescription, () => {
                     console.log('圖片辨識文字朗讀完成');
                 });
