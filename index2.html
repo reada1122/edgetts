@@ -1144,108 +1144,80 @@ function replaceTextWithSheetData(text, data) {
             // 設置音頻播放器
             const audioPlayer = document.getElementById('audioPlayer');
             
-            // 如果正在獲取權限，保存音頻 URL 以便後續使用
-            if (isRequestingPermission) {
-                permissionAudioUrl = audioUrl;
-                // 等待權限獲取完成後再設置音頻源
-                const checkPermission = setInterval(() => {
-                    if (!isRequestingPermission) {
-                        clearInterval(checkPermission);
-                        // 權限獲取完成，設置實際音頻源
-                        setupAudioPlayer(audioPlayer, audioUrl, callback);
-                    }
-                }, 100);
-                return; // 提前返回，等待權限獲取完成
-            }
+            // 添加錯誤處理
+            audioPlayer.onerror = (e) => {
+                console.error('音頻載入錯誤:', e);
+                console.error('音頻元素錯誤:', audioPlayer.error);
+                // 載入錯誤時調用回調
+                if (callback) callback();
+            };
             
-            // 正常情況下，直接設置音頻播放器
-            setupAudioPlayer(audioPlayer, audioUrl, callback);
-        } else {
-            throw new Error(data.error || '語音生成失敗');
-        }
-    })
-    .catch(error => {
-        console.error('TTS 發生錯誤：', error);
-        // 不要彈出警告，靜默處理錯誤
-        console.warn('TTS 錯誤已處理，繼續執行');
-        if (callback) callback();
-    });
-}
-
-// 設置音頻播放器的輔助函數
-function setupAudioPlayer(audioPlayer, audioUrl, callback) {
-    // 添加錯誤處理
-    audioPlayer.onerror = (e) => {
-        console.error('音頻載入錯誤:', e);
-        console.error('音頻元素錯誤:', audioPlayer.error);
-        // 載入錯誤時調用回調
-        if (callback) callback();
-    };
-    
-    // 添加載入事件
-    audioPlayer.onloadstart = () => console.log('開始載入音頻...');
-    
-    // 設置載入超時
-    let loadTimeout = setTimeout(() => {
-        console.error('音頻載入超時');
-        if (callback) callback();
-    }, 10000); // 10秒超時
-    
-    // 統一的播放處理函數
-    const handlePlay = () => {
-        if (loadTimeout) {
-            clearTimeout(loadTimeout);
-            loadTimeout = null;
-        }
-        console.log('音頻可以播放');
-        // 音頻準備好後自動播放
-        const playPromise = audioPlayer.play();
-        if (playPromise !== undefined) {
-            playPromise
-                .then(() => {
-                    console.log('音頻播放成功');
-                    // 播放成功後設置完成回調
+            // 添加載入事件
+            audioPlayer.onloadstart = () => console.log('開始載入音頻...');
+            audioPlayer.oncanplay = () => {
+                console.log('音頻可以播放');
+                // 音頻準備好後自動播放
+                const playPromise = audioPlayer.play();
+                if (playPromise !== undefined) {
+                    playPromise
+                        .then(() => {
+                            console.log('音頻播放成功');
+                            // 播放成功後設置完成回調
+                            audioPlayer.onended = callback;
+                        })
+                        .catch(error => {
+                            console.error('音頻播放失敗:', error);
+                            // 播放失敗時也要調用回調
+                            if (callback) callback();
+                        });
+                } else {
+                    // 如果沒有播放Promise，直接設置回調
                     audioPlayer.onended = callback;
-                })
-                .catch(error => {
-                    console.error('音頻播放失敗:', error);
-                    // iOS 上如果播放失敗，可能是權限問題，提示用戶
-                    if (error.name === 'NotAllowedError' || error.name === 'NotSupportedError') {
-                        console.warn('自動播放被阻止，可能需要用戶手動點擊播放');
-                        // 設置完成回調，讓用戶可以手動播放
-                        audioPlayer.onended = callback;
-                    } else {
-                        // 其他錯誤也要調用回調
-                        if (callback) callback();
-                    }
-                });
-        } else {
-            // 如果沒有播放Promise，直接設置回調
-            audioPlayer.onended = callback;
-        }
-    };
-    
-    // 使用 canplay 事件
-    audioPlayer.oncanplay = handlePlay;
-    
-    // 也監聽 loadeddata 事件作為備用（某些情況下可能更早觸發）
-    audioPlayer.onloadeddata = () => {
-        console.log('音頻數據已載入');
-        // 只在 canplay 還沒觸發時才處理
-        if (audioPlayer.readyState >= 2) {
-            handlePlay();
-        }
-    };
-    
-    // 添加更多事件監聽器
-    audioPlayer.onprogress = () => console.log('音頻載入進度中...');
-    audioPlayer.onabort = () => console.log('音頻載入被中止');
-    audioPlayer.onstalled = () => console.log('音頻載入停滯');
-    audioPlayer.onsuspend = () => console.log('音頻載入暫停');
-    
-    // 設置音頻源（這會觸發載入）
-    audioPlayer.src = audioUrl;
-}
+                }
+            };
+            
+            // 設置載入超時
+            let loadTimeout = setTimeout(() => {
+                console.error('音頻載入超時');
+                if (callback) callback();
+            }, 10000); // 10秒超時
+            
+            // 載入成功後清除超時
+            audioPlayer.oncanplay = () => {
+                if (loadTimeout) {
+                    clearTimeout(loadTimeout);
+                    loadTimeout = null;
+                }
+                console.log('音頻可以播放');
+                // 音頻準備好後自動播放
+                const playPromise = audioPlayer.play();
+                if (playPromise !== undefined) {
+                    playPromise
+                        .then(() => {
+                            console.log('音頻播放成功');
+                            // 播放成功後設置完成回調
+                            audioPlayer.onended = callback;
+                        })
+                        .catch(error => {
+                            console.error('音頻播放失敗:', error);
+                            // 播放失敗時也要調用回調
+                            if (callback) callback();
+                        });
+                } else {
+                    // 如果沒有播放Promise，直接設置回調
+                    audioPlayer.onended = callback;
+                }
+            };
+            
+            // 添加更多事件監聽器
+            audioPlayer.onloadeddata = () => console.log('音頻數據已載入');
+            audioPlayer.onprogress = () => console.log('音頻載入進度中...');
+            audioPlayer.onabort = () => console.log('音頻載入被中止');
+            audioPlayer.onstalled = () => console.log('音頻載入停滯');
+            audioPlayer.onsuspend = () => console.log('音頻載入暫停');
+            
+            // 設置音頻源
+            audioPlayer.src = audioUrl;
         } else {
             throw new Error(data.error || '語音生成失敗');
         }
@@ -1607,7 +1579,7 @@ async function geminiImageDescribe(base64Image) {
         // 從 IndexedDB 讀取 API KEY，如果沒有則使用預設值
         let apiKey = await loadApiKeyFromIndexedDB();
         if (!apiKey) {
-            apiKey = ''; // 預設 API KEY
+            apiKey = 'AIzaSyBOBtuaQNb7tw7h5MiPxHBAO4ws6dGBMhs'; // 預設 API KEY
         }
         
         console.log('開始調用 Gemini API，API KEY 長度:', apiKey.length);
@@ -1655,39 +1627,8 @@ async function geminiImageDescribe(base64Image) {
     }
 }
 
-// 用於追蹤是否正在獲取播放權限
-let isRequestingPermission = false;
-let permissionAudioUrl = null;
-
-// 預先獲取音頻播放權限（用於 iOS Safari）
-// 通過立即開始一個實際的 TTS 播放流程來獲取權限
-// 這個函數必須在用戶交互的同步上下文中調用
-function requestAudioPlaybackPermissionSync() {
-    // 在用戶點擊時，立即調用 sendTextToTTS 但傳入一個極短的文本
-    // 這樣可以確保在用戶交互上下文中開始播放流程
-    // 使用一個空格或極短文本來獲取播放權限
-    const placeholderText = ' '; // 極短文本，幾乎聽不到
-    
-    isRequestingPermission = true;
-    
-    // 立即調用 sendTextToTTS，但使用一個標記來識別這是權限獲取
-    // 我們會在圖片辨識完成後替換音頻源
-    sendTextToTTS(placeholderText, () => {
-        // 權限獲取完成，這個回調會在播放完成後執行
-        console.log('音頻播放權限已獲取');
-        isRequestingPermission = false;
-        permissionAudioUrl = null;
-    });
-}
-
 async function readTextInsideFrame() {
     window.speechSynthesis.cancel();
-    
-    // 在 iOS 上，需要在用戶交互的同步上下文中立即獲取音頻播放權限
-    // 這樣在異步操作完成後才能自動播放
-    // 注意：必須在同步上下文中調用，不能使用 await
-    requestAudioPlaybackPermissionSync();
-    
     const frameRect = frame.getBoundingClientRect();
     const viewerContainer = document.getElementById('viewerContainer');
     const pdfCanvas = viewerContainer.querySelector('canvas');
@@ -1729,7 +1670,6 @@ async function readTextInsideFrame() {
     }
     // 只要有 PDF 文字層，就只朗讀純文字，不送圖片給 AI
     if (cleanedText.length > 0) {
-        // 純文字讀取時，sendTextToTTS 在用戶交互上下文中直接調用，所以可以自動播放
         await new Promise((resolve, reject) => {
             sendTextToTTS(cleanedText, () => {
                 resolve();
@@ -1739,6 +1679,40 @@ async function readTextInsideFrame() {
     }
     // 沒有 PDF 文字層，才送圖片給 AI
     if (hasImageContent) {
+        // 在 iOS 上，需要在用戶交互的同步上下文中立即獲取音頻播放權限
+        // 這樣在異步圖片辨識完成後才能自動播放
+        const audioPlayer = document.getElementById('audioPlayer');
+        if (audioPlayer) {
+            try {
+                // 創建一個靜音音頻來獲取播放權限
+                const silentAudio = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+                const originalSrc = audioPlayer.src;
+                const originalVolume = audioPlayer.volume;
+                
+                // 設置靜音音頻並立即播放以獲取權限
+                audioPlayer.src = silentAudio;
+                audioPlayer.volume = 0;
+                const playPromise = audioPlayer.play();
+                if (playPromise !== undefined) {
+                    playPromise
+                        .then(() => {
+                            // 立即暫停並恢復狀態
+                            audioPlayer.pause();
+                            audioPlayer.currentTime = 0;
+                            audioPlayer.volume = originalVolume;
+                            audioPlayer.src = originalSrc || '';
+                        })
+                        .catch(() => {
+                            // 權限獲取失敗也繼續，恢復狀態
+                            audioPlayer.volume = originalVolume;
+                            audioPlayer.src = originalSrc || '';
+                        });
+                }
+            } catch (error) {
+                console.log('獲取音頻播放權限時發生錯誤:', error);
+            }
+        }
+        
         try {
             Swal.fire({
                 title: '正在辨識圖片',
@@ -1756,23 +1730,6 @@ async function readTextInsideFrame() {
             //console.log('Gemini 原始回傳:', aiDescription);
             if (aiDescription && aiDescription.length > 0) {
                 // 直接使用 Gemini 原始回傳，不進行任何清理
-                // 此時已經在用戶交互上下文中獲取了播放權限
-                // 如果音頻播放器正在播放權限獲取的音頻，我們需要先停止它
-                const audioPlayer = document.getElementById('audioPlayer');
-                if (isRequestingPermission && audioPlayer) {
-                    // 如果正在播放權限獲取的音頻，停止它
-                    if (!audioPlayer.paused) {
-                        audioPlayer.pause();
-                    }
-                    audioPlayer.currentTime = 0;
-                    audioPlayer.src = '';
-                    // 清除所有事件監聽器
-                    audioPlayer.oncanplay = null;
-                    audioPlayer.onloadeddata = null;
-                    audioPlayer.onended = null;
-                    isRequestingPermission = false;
-                }
-                // 然後開始播放實際的辨識結果
                 sendTextToTTS(aiDescription, () => {
                     console.log('圖片辨識文字朗讀完成');
                 });
