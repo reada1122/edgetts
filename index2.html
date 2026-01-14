@@ -1154,27 +1154,6 @@ function replaceTextWithSheetData(text, data) {
             
             // 添加載入事件
             audioPlayer.onloadstart = () => console.log('開始載入音頻...');
-            audioPlayer.oncanplay = () => {
-                console.log('音頻可以播放');
-                // 音頻準備好後自動播放
-                const playPromise = audioPlayer.play();
-                if (playPromise !== undefined) {
-                    playPromise
-                        .then(() => {
-                            console.log('音頻播放成功');
-                            // 播放成功後設置完成回調
-                            audioPlayer.onended = callback;
-                        })
-                        .catch(error => {
-                            console.error('音頻播放失敗:', error);
-                            // 播放失敗時也要調用回調
-                            if (callback) callback();
-                        });
-                } else {
-                    // 如果沒有播放Promise，直接設置回調
-                    audioPlayer.onended = callback;
-                }
-            };
             
             // 設置載入超時
             let loadTimeout = setTimeout(() => {
@@ -1182,8 +1161,8 @@ function replaceTextWithSheetData(text, data) {
                 if (callback) callback();
             }, 10000); // 10秒超時
             
-            // 載入成功後清除超時
-            audioPlayer.oncanplay = () => {
+            // 統一的播放處理函數
+            const handlePlay = () => {
                 if (loadTimeout) {
                     clearTimeout(loadTimeout);
                     loadTimeout = null;
@@ -1200,8 +1179,15 @@ function replaceTextWithSheetData(text, data) {
                         })
                         .catch(error => {
                             console.error('音頻播放失敗:', error);
-                            // 播放失敗時也要調用回調
-                            if (callback) callback();
+                            // iOS 上如果播放失敗，可能是權限問題，提示用戶
+                            if (error.name === 'NotAllowedError' || error.name === 'NotSupportedError') {
+                                console.warn('自動播放被阻止，可能需要用戶手動點擊播放');
+                                // 設置完成回調，讓用戶可以手動播放
+                                audioPlayer.onended = callback;
+                            } else {
+                                // 其他錯誤也要調用回調
+                                if (callback) callback();
+                            }
                         });
                 } else {
                     // 如果沒有播放Promise，直接設置回調
@@ -1209,8 +1195,19 @@ function replaceTextWithSheetData(text, data) {
                 }
             };
             
+            // 使用 canplay 事件
+            audioPlayer.oncanplay = handlePlay;
+            
+            // 也監聽 loadeddata 事件作為備用（某些情況下可能更早觸發）
+            audioPlayer.onloadeddata = () => {
+                console.log('音頻數據已載入');
+                // 只在 canplay 還沒觸發時才處理
+                if (audioPlayer.readyState >= 2) {
+                    handlePlay();
+                }
+            };
+            
             // 添加更多事件監聽器
-            audioPlayer.onloadeddata = () => console.log('音頻數據已載入');
             audioPlayer.onprogress = () => console.log('音頻載入進度中...');
             audioPlayer.onabort = () => console.log('音頻載入被中止');
             audioPlayer.onstalled = () => console.log('音頻載入停滯');
@@ -1627,8 +1624,67 @@ async function geminiImageDescribe(base64Image) {
     }
 }
 
+// 預先獲取音頻播放權限（用於 iOS Safari）
+async function requestAudioPlaybackPermission() {
+    const audioPlayer = document.getElementById('audioPlayer');
+    if (!audioPlayer) return;
+    
+    try {
+        // 創建一個空的音頻源來獲取播放權限
+        // 使用 data URI 創建一個極短的靜音音頻（1秒的靜音 WAV）
+        const silentAudio = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+        
+        // 保存當前的 src（如果有的話）
+        const originalSrc = audioPlayer.src;
+        
+        // 設置一個靜音源來獲取播放權限
+        audioPlayer.src = silentAudio;
+        audioPlayer.volume = 0; // 設置音量為 0
+        
+        // 等待音頻元素準備好
+        await new Promise((resolve) => {
+            if (audioPlayer.readyState >= 2) {
+                resolve();
+            } else {
+                audioPlayer.oncanplay = resolve;
+                // 設置超時，避免無限等待
+                setTimeout(resolve, 100);
+            }
+        });
+        
+        // 嘗試播放以獲取用戶交互權限
+        const playPromise = audioPlayer.play();
+        if (playPromise !== undefined) {
+            await playPromise.catch(error => {
+                // 如果播放失敗，這是正常的，我們只是為了獲取權限
+                console.log('預先獲取播放權限:', error.message);
+            });
+            // 立即暫停，因為我們只是為了獲取權限
+            audioPlayer.pause();
+            audioPlayer.currentTime = 0;
+        }
+        
+        // 恢復原始音量
+        audioPlayer.volume = 1;
+        
+        // 如果原來有 src，恢復它；否則清空
+        if (originalSrc) {
+            audioPlayer.src = originalSrc;
+        } else {
+            audioPlayer.src = '';
+        }
+    } catch (error) {
+        console.log('獲取音頻播放權限時發生錯誤:', error);
+    }
+}
+
 async function readTextInsideFrame() {
     window.speechSynthesis.cancel();
+    
+    // 在 iOS 上，需要在用戶交互時立即獲取音頻播放權限
+    // 這樣在異步操作完成後才能自動播放
+    await requestAudioPlaybackPermission();
+    
     const frameRect = frame.getBoundingClientRect();
     const viewerContainer = document.getElementById('viewerContainer');
     const pdfCanvas = viewerContainer.querySelector('canvas');
