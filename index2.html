@@ -1579,7 +1579,7 @@ async function geminiImageDescribe(base64Image) {
         // 從 IndexedDB 讀取 API KEY，如果沒有則使用預設值
         let apiKey = await loadApiKeyFromIndexedDB();
         if (!apiKey) {
-            apiKey = 'AIzaSyBOBtuaQNb7tw7h5MiPxHBAO4ws6dGBMhs'; // 預設 API KEY
+            apiKey = ''; // 預設 API KEY
         }
         
         console.log('開始調用 Gemini API，API KEY 長度:', apiKey.length);
@@ -1684,7 +1684,7 @@ async function readTextInsideFrame() {
         let permissionObtained = false;
         
         // 立即在用戶交互上下文中播放"辨識中請稍候"以獲取權限
-        sendTextToTTS('辨識中請稍候', () => {
+        sendTextToTTS('圖片辨識中，請稍候。', () => {
             permissionObtained = true;
             console.log('播放權限已獲取，開始圖片辨識');
         });
