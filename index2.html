@@ -337,7 +337,7 @@ input[type=range]::-moz-range-thumb {
     <!-- API KEY 設定模態視窗 -->
     <div id="apiKeyModal" class="modal" style="display: none; z-index: 10020;">
         <div style="padding: 20px;">
-            <h2 style="margin-top: 0;">設定 Gemini API KEY</h2>
+            <h2 style="margin-top: 0;">設定圖片辨識用的 Gemini API KEY</h2>
             <div style="margin-bottom: 15px;">
                 <label for="apiKeyInput" style="display: block; margin-bottom: 5px; font-weight: bold;">API KEY：</label>
                 <input type="password" id="apiKeyInput" placeholder="請輸入或掃描 QR Code" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 14px; box-sizing: border-box;">
@@ -526,6 +526,9 @@ window.addEventListener('orientationchange', () => {
 // Initial render
 renderPage(currentPage);
 	
+// Google Apps Script 代理 URL（備用選項）
+const gasUrl = 'https://script.google.com/macros/s/AKfycbz22gIlfLOry1KdMW5A2NlcO1o9859zXGP1Yf0GklsNbU4VF-WBRJtW2sGL8rZIE1oq/exec';
+
 // CORS 代理服務（台灣區友好）
 // 注意：免費代理服務可能不穩定，建議使用 Cloudflare Workers 自建代理
 // 自建代理教程：https://developers.cloudflare.com/workers/
@@ -539,9 +542,7 @@ const CORS_PROXIES = [
     // 以下為公開的免費代理服務（可能有速率限制或不穩定）
     'https://api.allorigins.win/raw?url=',           // 免費，有速率限制
     'https://api.codetabs.com/v1/proxy?quest='      // 免費，僅支援 GET 請求
-    // 注意：以下服務可能不穩定或已停止服務，請謹慎使用
-    // 'https://thingproxy.freeboard.io/fetch/',     // 可能不穩定
-    // 'https://yacdn.org/proxy/'                    // 可能不穩定
+  
 ];
 
 
@@ -749,7 +750,38 @@ async function loadPdfFromDrive(fileId, showLoading = true) {
             .catch(() => null) // 靜默失敗，不影響其他嘗試
     );
     
-    // 2. 使用 CORS 代理（並行嘗試所有代理）
+    // 2. 使用 GAS 代理（備用選項）
+    downloadPromises.push(
+        (async () => {
+            try {
+                const gasResponse = await fetchWithTimeout(
+                    `${gasUrl}?fileId=${fileId}`, 
+                    { method: 'GET' }, 
+                    10000
+                );
+                
+                if (gasResponse.ok) {
+                    const data = await gasResponse.json();
+                    if (data.fileContent && data.fileName) {
+                        // GAS 返回 base64 編碼的內容
+                        const fileContent = atob(data.fileContent);
+                        const arrayBuffer = new ArrayBuffer(fileContent.length);
+                        const uint8Array = new Uint8Array(arrayBuffer);
+                        for (let i = 0; i < fileContent.length; i++) {
+                            uint8Array[i] = fileContent.charCodeAt(i);
+                        }
+                        fileName = data.fileName;
+                        return { source: 'gas', data: arrayBuffer };
+                    }
+                }
+                throw new Error('GAS 代理回應錯誤');
+            } catch (error) {
+                return null; // 靜默失敗
+            }
+        })()
+    );
+    
+    // 3. 使用 CORS 代理（並行嘗試所有代理）
     for (let i = 0; i < CORS_PROXIES.length; i++) {
         // 跳過註解掉的代理
         if (CORS_PROXIES[i].includes('YOUR_WORKER_URL') || CORS_PROXIES[i].trim() === '') {
