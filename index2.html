@@ -332,12 +332,12 @@ input[type=range]::-moz-range-thumb {
     <button id="clearCacheButton" class="button button-danger" style="writing-mode: vertical-rl; text-orientation: upright;position: fixed; left: 0px; top: 450px; z-index: 1100; font-size: 16px;">清除快取</button> 
 
     <!-- API KEY 設定按鈕 -->
-    <button id="apiKeySettingsButton" class="button button-secondary" style="position: fixed; top: 70px; left: 0px; z-index: 2000; width: 40px; height: 40px; border-radius: 50%; padding: 0; font-size: 20px; display: flex; align-items: center; justify-content: center;" title="設定 Gemini API KEY">🔑</button>
+    <button id="apiKeySettingsButton" class="button button-secondary" style="position: fixed; top: 70px; left: 0px; z-index: 1; width: 40px; height: 40px; border-radius: 50%; padding: 0; font-size: 20px; display: flex; align-items: center; justify-content: center;" title="設定 Gemini API KEY">🔑</button>
 
     <!-- API KEY 設定模態視窗 -->
     <div id="apiKeyModal" class="modal" style="display: none; z-index: 10020;">
         <div style="padding: 20px;">
-            <h2 style="margin-top: 0;">設定 Gemini API KEY</h2>
+            <h2 style="margin-top: 0;">設定圖片辨識用的 Gemini API KEY</h2>
             <div style="margin-bottom: 15px;">
                 <label for="apiKeyInput" style="display: block; margin-bottom: 5px; font-weight: bold;">API KEY：</label>
                 <input type="password" id="apiKeyInput" placeholder="請輸入或掃描 QR Code" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 14px; box-sizing: border-box;">
@@ -527,7 +527,7 @@ window.addEventListener('orientationchange', () => {
 renderPage(currentPage);
 	
 // Google Apps Script 代理 URL
-const gasUrl = 'https://script.google.com/macros/s/AKfycbz22gIlfLOry1KdMW5A2NlcO1o9859zXGP1Yf0GklsNbU4VF-WBRJtW2sGL8rZIE1oq/exec'; // 替換為你的 GAS 部署 URL
+const gasUrl = 'https://script.google.com/macros/s/AKfycbz22gIlfLOry1KdMW5A2NlcO1o9859zXGP1Yf0GklsNbU4VF-WBRJtW2sGL8rZIE1oq/exec';
 
 
 // 打開 IndexedDB 資料庫
@@ -675,7 +675,7 @@ function updateUrl(fileName) {
     window.history.replaceState({}, '', newUrl);
 }
 
-// 從 Google 雲端硬碟載入 PDF 檔案
+// 從 Google 雲端硬碟載入 PDF 檔案（使用 GAS 代理）
 async function loadPdfFromDrive(fileId, showLoading = true) {
     // 檢查是否是本地檔案名稱（包含 .pdf 結尾）
     if (fileId && fileId.toLowerCase().endsWith('.pdf')) {
@@ -683,34 +683,65 @@ async function loadPdfFromDrive(fileId, showLoading = true) {
         return;
     }
 
-    const url = `${gasUrl}?fileId=${fileId}`;
+    if (showLoading) {
+        Swal.fire({
+            title: '載入中請稍候',
+            text: '正在從雲端硬碟載入檔案...',
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+    }
+
+    let fileName = `file_${fileId}.pdf`;
+    
+    // 創建帶超時的 fetch 函數
+    const fetchWithTimeout = (url, options = {}, timeout = 10000) => {
+        return Promise.race([
+            fetch(url, options),
+            new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('請求超時')), timeout)
+            )
+        ]);
+    };
     
     try {
-        if (showLoading) {
-            Swal.fire({
-                title: '載入中請稍候',
-                text: '正在從雲端硬碟載入檔案...',
-                allowOutsideClick: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                }
-            });
+        // 使用 GAS 代理下載
+        console.log('使用 GAS 代理下載檔案...');
+        const gasResponse = await fetchWithTimeout(
+            `${gasUrl}?fileId=${fileId}`, 
+            { method: 'GET' }, 
+            10000
+        );
+        
+        if (!gasResponse.ok) {
+            throw new Error(`GAS 代理回應錯誤: ${gasResponse.status} ${gasResponse.statusText}`);
         }
-
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error('Failed to fetch file');
+        
+        const data = await gasResponse.json();
+        
+        if (!data.fileContent || !data.fileName) {
+            throw new Error('GAS 代理返回的資料格式錯誤');
         }
-        const data = await response.json();
+        
+        // GAS 返回 base64 編碼的內容
         const fileContent = atob(data.fileContent);
         const arrayBuffer = new ArrayBuffer(fileContent.length);
         const uint8Array = new Uint8Array(arrayBuffer);
         for (let i = 0; i < fileContent.length; i++) {
             uint8Array[i] = fileContent.charCodeAt(i);
         }
-        const blob = new Blob([uint8Array], { type: 'application/pdf' });
-        const file = new File([blob], data.fileName, { type: 'application/pdf' });
+        fileName = data.fileName;
+        
+        console.log(`✓ 下載成功，來源: GAS 代理`);
+        
+        // 將 ArrayBuffer 轉換為 File 並保存
+        const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+        const file = new File([blob], fileName, { type: 'application/pdf' });
         await saveFileToIndexedDB(file);
+        
+        // 載入 PDF
         const typedarray = new Uint8Array(arrayBuffer);
         pdfjsLib.getDocument(typedarray).promise.then(pdf => {
             pdfDoc = pdf;
@@ -728,12 +759,20 @@ async function loadPdfFromDrive(fileId, showLoading = true) {
             });
         });
     } catch (error) {
-        console.error('載入 Google 雲端硬碟 PDF 檔案失敗：', error);
+        console.error('GAS 代理下載失敗：', error);
         if (showLoading) {
             Swal.fire({
                 icon: 'error',
-                title: '載入失敗',
-                text: '無法載入 PDF 檔案，請檢查檔案 ID 是否正確。',
+                title: '下載失敗',
+                text: '無法從 Google 雲端硬碟下載檔案。\n\n' +
+                    '可能的原因：\n' +
+                    '1. 檔案未公開分享（請確認檔案分享設定為「知道連結的使用者」）\n' +
+                    '2. GAS 代理服務異常\n' +
+                    '3. 網路連線問題\n\n' +
+                    '建議：\n' +
+                    '- 確認檔案已公開分享\n' +
+                    '- 檢查網路連線\n' +
+                    '- 稍後再試',
             });
         }
     }
@@ -882,69 +921,6 @@ pdfFileInput.addEventListener('change', async (event) => {
     }
 });
 
-// 修改 loadPdfFromDrive 函數，增加對本地檔案的檢查
-async function loadPdfFromDrive(fileId, showLoading = true) {
-    // 檢查是否是本地檔案名稱（包含 .pdf 結尾）
-    if (fileId && fileId.toLowerCase().endsWith('.pdf')) {
-        console.log('檢測到本地檔案名稱，跳過 Google 雲端硬碟載入');
-        return;
-    }
-
-    const url = `${gasUrl}?fileId=${fileId}`;
-    
-    try {
-        if (showLoading) {
-            Swal.fire({
-                title: '載入中請稍候',
-                text: '正在從雲端硬碟載入檔案...',
-                allowOutsideClick: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                }
-            });
-        }
-
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error('Failed to fetch file');
-        }
-        const data = await response.json();
-        const fileContent = atob(data.fileContent);
-        const arrayBuffer = new ArrayBuffer(fileContent.length);
-        const uint8Array = new Uint8Array(arrayBuffer);
-        for (let i = 0; i < fileContent.length; i++) {
-            uint8Array[i] = fileContent.charCodeAt(i);
-        }
-        const blob = new Blob([uint8Array], { type: 'application/pdf' });
-        const file = new File([blob], data.fileName, { type: 'application/pdf' });
-        await saveFileToIndexedDB(file);
-        const typedarray = new Uint8Array(arrayBuffer);
-        pdfjsLib.getDocument(typedarray).promise.then(pdf => {
-            pdfDoc = pdf;
-            renderPage(currentPage);
-            updateUrl(fileId);
-            if (showLoading) {
-                Swal.close();
-            }
-        }).catch(error => {
-            console.error('PDF 檔案載入失敗：', error);
-            Swal.fire({
-                icon: 'error',
-                title: '載入失敗',
-                text: '無法載入 PDF 檔案，請檢查檔案是否正確或未開放瀏覽。',
-            });
-        });
-    } catch (error) {
-        console.error('載入 Google 雲端硬碟 PDF 檔案失敗：', error);
-        if (showLoading) {
-            Swal.fire({
-                icon: 'error',
-                title: '載入失敗',
-                text: '無法載入 PDF 檔案，請檢查檔案 ID 是否正確。',
-            });
-        }
-    }
-}
 // 上一頁和下一頁按鈕的事件監聽
 // 修改上一頁/下一頁按鈕事件
 prevPageButton.addEventListener('click', () => {
@@ -1628,6 +1604,12 @@ async function geminiImageDescribe(base64Image) {
 }
 
 async function readTextInsideFrame() {
+    // 如果正在進行圖片辨識，直接返回，防止重複執行
+    if (isImageRecognizing) {
+        console.log('圖片辨識正在進行中，忽略重複請求');
+        return;
+    }
+    
     window.speechSynthesis.cancel();
     const frameRect = frame.getBoundingClientRect();
     const viewerContainer = document.getElementById('viewerContainer');
@@ -1679,13 +1661,12 @@ async function readTextInsideFrame() {
     }
     // 沒有 PDF 文字層，才送圖片給 AI
     if (hasImageContent) {
-        // 在 iOS 上，需要在用戶交互的同步上下文中立即獲取音頻播放權限
-        // 通過播放"辨識中請稍候"來獲取權限，同時給用戶提示
-        let permissionObtained = false;
+        // 設置標記，防止重複執行
+        isImageRecognizing = true;
         
-        // 立即在用戶交互上下文中播放"辨識中請稍候"以獲取權限
+        // 在 iOS 上，需要在用戶交互的同步上下文中立即獲取音頻播放權限
+        // 通過播放"圖片辨識中，請稍候。"來獲取權限，同時給用戶提示
         sendTextToTTS('圖片辨識中，請稍候。', () => {
-            permissionObtained = true;
             console.log('播放權限已獲取，開始圖片辨識');
         });
         
@@ -1705,7 +1686,7 @@ async function readTextInsideFrame() {
             Swal.close();
             //console.log('Gemini 原始回傳:', aiDescription);
             if (aiDescription && aiDescription.length > 0) {
-                // 等待"辨識中請稍候"播放完成（或至少等待一小段時間確保權限已獲取）
+                // 等待"圖片辨識中，請稍候。"播放完成（或至少等待一小段時間確保權限已獲取）
                 // 如果還在播放，停止它
                 const audioPlayer = document.getElementById('audioPlayer');
                 if (audioPlayer && !audioPlayer.paused) {
@@ -1717,6 +1698,8 @@ async function readTextInsideFrame() {
                 // 此時已經獲取了播放權限，可以自動播放
                 sendTextToTTS(aiDescription, () => {
                     console.log('圖片辨識文字朗讀完成');
+                    // 辨識完成，重置標記
+                    isImageRecognizing = false;
                 });
             } else {
                 console.error('Gemini 回傳的內容為空');
@@ -1725,6 +1708,8 @@ async function readTextInsideFrame() {
                     title: '辨識結果為空',
                     text: 'AI 無法辨識圖片內容'
                 });
+                // 辨識失敗，重置標記
+                isImageRecognizing = false;
             }
         } catch (error) {
             console.error('Gemini 辨識失敗:', error);
@@ -1733,6 +1718,8 @@ async function readTextInsideFrame() {
                 title: '辨識失敗',
                 text: 'AI 辨識過程中發生錯誤。'
             });
+            // 辨識失敗，重置標記
+            isImageRecognizing = false;
         }
         return;
     }
@@ -1774,6 +1761,7 @@ function cropCanvas(sourceCanvas, cropRect) {
   return canvas;
 }
   let lastTouchElement = null;
+  let isImageRecognizing = false; // 防止圖片辨識重複執行
 
  function wrapTextInFraTags() {
     const markedContentSpans = document.querySelectorAll('span[role="presentation"]');
