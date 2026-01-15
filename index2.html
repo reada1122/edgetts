@@ -1128,42 +1128,30 @@ function replaceTextWithSheetData(text, data) {
                 if (callback) callback();
             };
             
-            // 添加載入事件
-            audioPlayer.onloadstart = () => console.log('開始載入音頻...');
-            audioPlayer.oncanplay = () => {
-                console.log('音頻可以播放');
-                // 音頻準備好後自動播放
-                const playPromise = audioPlayer.play();
-                if (playPromise !== undefined) {
-                    playPromise
-                        .then(() => {
-                            console.log('音頻播放成功');
-                            // 播放成功後設置完成回調
-                            audioPlayer.onended = callback;
-                        })
-                        .catch(error => {
-                            console.error('音頻播放失敗:', error);
-                            // 播放失敗時也要調用回調
-                            if (callback) callback();
-                        });
-                } else {
-                    // 如果沒有播放Promise，直接設置回調
-                    audioPlayer.onended = callback;
-                }
-            };
+            // 清除之前的事件監聽器，防止重複播放
+            audioPlayer.oncanplay = null;
+            audioPlayer.onended = null;
+            audioPlayer.onerror = null;
             
             // 設置載入超時
             let loadTimeout = setTimeout(() => {
                 console.error('音頻載入超時');
-                if (callback) callback();
-            }, 10000); // 10秒超時
-            
-            // 載入成功後清除超時
-            audioPlayer.oncanplay = () => {
                 if (loadTimeout) {
                     clearTimeout(loadTimeout);
                     loadTimeout = null;
                 }
+                if (callback) callback();
+            }, 10000); // 10秒超時
+            
+            // 添加載入事件（只設置一次）
+            audioPlayer.onloadstart = () => console.log('開始載入音頻...');
+            audioPlayer.oncanplay = () => {
+                // 清除超時
+                if (loadTimeout) {
+                    clearTimeout(loadTimeout);
+                    loadTimeout = null;
+                }
+                
                 console.log('音頻可以播放');
                 // 音頻準備好後自動播放
                 const playPromise = audioPlayer.play();
@@ -1666,9 +1654,14 @@ async function readTextInsideFrame() {
         
         // 在 iOS 上，需要在用戶交互的同步上下文中立即獲取音頻播放權限
         // 通過播放"圖片辨識中，請稍候。"來獲取權限，同時給用戶提示
-        sendTextToTTS('圖片辨識中，請稍候。', () => {
-            console.log('播放權限已獲取，開始圖片辨識');
-        });
+        // 防止重複播放
+        if (!isPlayingWaitingMessage) {
+            isPlayingWaitingMessage = true;
+            sendTextToTTS('圖片辨識中，請稍候。', () => {
+                console.log('播放權限已獲取，開始圖片辨識');
+                isPlayingWaitingMessage = false; // 播放完成後重置標記
+            });
+        }
         
         try {
             Swal.fire({
@@ -1700,6 +1693,7 @@ async function readTextInsideFrame() {
                     console.log('圖片辨識文字朗讀完成');
                     // 辨識完成，重置標記
                     isImageRecognizing = false;
+                    isPlayingWaitingMessage = false;
                 });
             } else {
                 console.error('Gemini 回傳的內容為空');
@@ -1710,6 +1704,7 @@ async function readTextInsideFrame() {
                 });
                 // 辨識失敗，重置標記
                 isImageRecognizing = false;
+                isPlayingWaitingMessage = false;
             }
         } catch (error) {
             console.error('Gemini 辨識失敗:', error);
@@ -1720,6 +1715,7 @@ async function readTextInsideFrame() {
             });
             // 辨識失敗，重置標記
             isImageRecognizing = false;
+            isPlayingWaitingMessage = false;
         }
         return;
     }
@@ -1762,6 +1758,7 @@ function cropCanvas(sourceCanvas, cropRect) {
 }
   let lastTouchElement = null;
   let isImageRecognizing = false; // 防止圖片辨識重複執行
+  let isPlayingWaitingMessage = false; // 防止"圖片辨識中，請稍候"語音重複播放
 
  function wrapTextInFraTags() {
     const markedContentSpans = document.querySelectorAll('span[role="presentation"]');
